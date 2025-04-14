@@ -10,6 +10,8 @@ Otherwise, the normalized distance squared is used to affect the likelihood of a
 
 ## Autonomous ZombShark
 
+![alt text](https://github.com/sarabonardi/zombie-island/blob/main/Assets/Sprites/sharkie.png "Sharkie")
+
 The evil lurking in the waters has been implemented using semi-random steering. 
 He chooses a random direction when instantiated/on start and then chooses a random direction +/- 45 degrees from his current direction after the given interval.
 This is what gives the appearance of a swiveling shark navigating the waters around the archipelago.

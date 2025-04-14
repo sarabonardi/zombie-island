@@ -3,8 +3,8 @@ using UnityEngine;
 public class ZombShark : MonoBehaviour
 {
     public float speed = 3f;
-    public float directionChangeInterval = 3f;
-    public float repulsionRadius = 2f;
+    public float directionChangeInterval = 1.5f;
+    public float repulsionRadius = 5f;
     public float sampleSpacing = 0.5f;
     public float repulsionStrength = 5f;
 
@@ -18,18 +18,16 @@ public class ZombShark : MonoBehaviour
     public float minY = -50f;
     public float maxY = 50f;
 
-    void Start()
-    {
+    void Start() {
         Debug.Log("Sharkie swimming :)");
         direction = Random.insideUnitCircle.normalized;
     }
 
-    void Update()
-    {
+    void Update() {
         timer += Time.deltaTime;
         if (timer >= directionChangeInterval)
         {
-            float angle = Random.Range(-90f, 90f);
+            float angle = Random.Range(-45f, 45f);
             direction = RotateVector(direction, angle);
             timer = 0.0f;
         }
@@ -37,18 +35,18 @@ public class ZombShark : MonoBehaviour
         Vector2 repulsion = RepelFromWalls();
         Vector2 finalDir = (direction + repulsion).normalized;
 
-        Vector3 move = new Vector3(finalDir.x, 0f, finalDir.y);
+        Vector3 move = new Vector3(finalDir.x, 0.0f, finalDir.y);
         Vector3 nextPos = transform.position + move * speed * Time.deltaTime;
 
-        // Clamp within X and Z bounds (not Y!)
+        // clamp within bounds
         nextPos.x = Mathf.Clamp(nextPos.x, minX, maxX);
+        nextPos.y = 0.0f;
         nextPos.z = Mathf.Clamp(nextPos.z, minY, maxY);
 
         transform.position = nextPos;
     }
 
-    Vector2 RotateVector(Vector2 direction, float angle)
-    {
+    Vector2 RotateVector(Vector2 direction, float angle) {
         float radians = angle * Mathf.Deg2Rad;
         float cos = Mathf.Cos(radians);
         float sin = Mathf.Sin(radians);
@@ -59,10 +57,9 @@ public class ZombShark : MonoBehaviour
         ).normalized;
     }
 
-    Vector2 RepelFromWalls()
-    {
+    Vector2 RepelFromWalls() {
         Vector2 repel = Vector2.zero;
-        Vector2 currentPos = transform.position;
+        Vector2 currentPos = new Vector2(transform.position.x, transform.position.z); // FIXED
 
         for (float dx = -repulsionRadius; dx <= repulsionRadius; dx += sampleSpacing)
         {
@@ -83,10 +80,11 @@ public class ZombShark : MonoBehaviour
 
                         float typeMultiplier = tileType switch
                         {
-                            3 => 1.5f,
-                            1 => 1.2f,
-                            0 => 1.0f,
-                            _ => 1.0f
+                            3 => 2f,
+                            1 => 2f,
+                            0 => 1f,
+                            -1 => 1f,
+                            _ => 1f
                         };
 
                         repel += offset.normalized * -strength * typeMultiplier;
@@ -97,4 +95,5 @@ public class ZombShark : MonoBehaviour
 
         return repel.normalized * repulsionStrength;
     }
+
 }

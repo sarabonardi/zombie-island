@@ -51,7 +51,7 @@ public class MapGenerator : MonoBehaviour
 		map = new int[width, height];
 
 		// Stage 1: populate the grid cells
-		PopulateMap();
+		RandomFillMap();
 
 		// Stage 2: apply cellular automata rules
 		for (int i = 0; i < 8; i++)
@@ -84,10 +84,6 @@ public class MapGenerator : MonoBehaviour
 	/*
 	 * STAGE 1: Populate the map
 	 */
-	void PopulateMap()
-    {
-		RandomFillMap();
-    }
 
 	void RandomFillMap()
 	{
@@ -108,8 +104,7 @@ public class MapGenerator : MonoBehaviour
 		}
 
 
-		for (int x = 0; x < width; x++)
-		{
+		for (int x = 0; x < width; x++) {
 			for (int y = 0; y < height; y++)
 			{
 				if (alwaysKeepEdgesAsWalls && (x == 0 || x == width - 1 || y == 0 || y == height - 1))
@@ -391,14 +386,14 @@ public class MapGenerator : MonoBehaviour
 		// Try to find a water tile
 		for (int i = 0; i < 100; i++)
 		{
-			int x = Random.Range(0, map.GetLength(0));
-			int y = Random.Range(0, map.GetLength(1));
+			int x = Random.Range(0, width);
+			int y = Random.Range(0, height);
 
 			if (map[x, y] == 2)
 			{
 				float worldX = x - map.GetLength(0) / 2f + 0.5f;
 				float worldY = y - map.GetLength(1) / 2f + 0.5f;
-				Vector3 spawnPos = new Vector3(worldX, worldY, 0f);
+				Vector3 spawnPos = new Vector3(worldX, 0f, worldY);
 
 				currentSharkie = Instantiate(sharkiePrefab, spawnPos, sharkiePrefab.transform.rotation);
 
