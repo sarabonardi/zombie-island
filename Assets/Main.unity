@@ -368,7 +368,7 @@ MonoBehaviour:
   height: 70
   seed: 
   useRandomSeed: 1
-  randomFillPercent: 80
+  fillPercent: 0
   alwaysKeepEdgesAsWalls: 0
   waterTilePositions: []
   sharkiePrefab: {fileID: 2732523104992838459, guid: 21868f4fad48d4cf19d6ee83a02c2f90, type: 3}

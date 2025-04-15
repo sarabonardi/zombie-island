@@ -16,7 +16,7 @@ public class MapGenerator : MonoBehaviour
 	public bool useRandomSeed;
 
 	// [Range(0, 100)]
-	public int randomFillPercent;
+	public int fillPercent;
 
 	public bool alwaysKeepEdgesAsWalls;
 
@@ -36,8 +36,7 @@ public class MapGenerator : MonoBehaviour
 	 * Generate the map on start, on mouse click
 	 */
 	void Start() {
-		randomFillPercent = 80;
-		alwaysKeepEdgesAsWalls = false;
+		fillPercent = 80;
 		GenerateMap();
 	}
 
@@ -50,92 +49,96 @@ public class MapGenerator : MonoBehaviour
 	void GenerateMap() {
 		map = new int[width, height];
 
-		// Stage 1: populate the grid cells
+		// populate the grid cells
 		RandomFillMap();
 
-		// Stage 2: apply cellular automata rules
-		for (int i = 0; i < 8; i++)
-		{
+		// apply cellular automata rules
+		for (int i = 0; i < 8; i++) {
 			SmoothMap();
 		}
 
-		// Stage 3: finalise the map
+		// finalize the map
 		ProcessMap();
 		AddMapBorder();
 
-		// Generate mesh
+		// generate mesh
 		MeshGenerator meshGen = GetComponent<MeshGenerator>();
 		meshGen.GenerateMesh(map, 1);
 
+		// demolish old lab for each new map
 		if (currentLab != null) {
 			Destroy(currentLab);
 		}
 
+		// pick an island and calculate respective world position for lab
 		if (laboratoryPrefab != null && islandCenters != null && islandCenters.Length > 0) {
-			// pick an island
 			Vector2 center = islandCenters[Random.Range(0, islandCenters.Length)];
-			Vector3 worldPos = new Vector3(center.x - width / 2.0f + 0.5f, 0.5f, center.y - height / 2f + 2.5f);
+			Vector3 worldPos = new Vector3(center.x - width / 2.0f + 0.5f, 0.5f, center.y - height / 2f + 5f);
 			currentLab = Instantiate(laboratoryPrefab, worldPos, Quaternion.Euler(90f, 0.0f, 0.0f));
 		}
+
+		// add friends :)
 		SpawnSharkie();
 		SpawnZombies();
 	}
+
 
 	/*
 	 * STAGE 1: Populate the map
 	 */
 
-	void RandomFillMap()
-	{
-		if (useRandomSeed)
-		{
+	void RandomFillMap() {
+
+		// use current time for random seeds
+		if (useRandomSeed) {
 			seed = Time.time.ToString();
 		}
 
-		System.Random pseudoRandom = new System.Random(seed.GetHashCode());
+		// using seeded randomization for determinism if I want it
+		System.Random random = new System.Random(seed.GetHashCode());
 
 		// randomize centers of large islands
 		islandCenters = new Vector2[3];
 		for (int i = 0; i < islandCenters.Length; i++) {
 			float margin = Mathf.Min(width, height) * 0.2f;
-			float x = (float)pseudoRandom.NextDouble() * (width - margin * 2) + margin;
-			float y = (float)pseudoRandom.NextDouble() * (height - margin * 2) + margin;
+			// keeps centers between margin and height or width - margin
+			float x = (float)random.NextDouble() * (width - margin * 2) + margin;
+			float y = (float)random.NextDouble() * (height - margin * 2) + margin;
 			islandCenters[i] = new Vector2(x, y);
 		}
 
-
+		// iterate through grid
 		for (int x = 0; x < width; x++) {
-			for (int y = 0; y < height; y++)
-			{
-				if (alwaysKeepEdgesAsWalls && (x == 0 || x == width - 1 || y == 0 || y == height - 1))
-				{
+			for (int y = 0; y < height; y++) {
+				if (alwaysKeepEdgesAsWalls && (x == 0 || x == width - 1 || y == 0 || y == height - 1)) {
 					map[x, y] = 1;
 				}
-				else
-				{
+				else {
 					Vector2 pos = new Vector2(x, y);
 
 					// find closest island center
 					float closestDistance = float.MaxValue;
-					foreach (Vector2 center in islandCenters)
-					{
+					foreach (Vector2 center in islandCenters) {
 						float dist = Vector2.Distance(pos, center);
-						if (dist < closestDistance)
+						if (dist < closestDistance) {
 							closestDistance = dist;
+						}	
 					}
 
 					// apply falloff
 					float maxIslandRadius = Mathf.Min(width, height) * 0.35f; // controls island size
-					if (closestDistance > maxIslandRadius)
-					{
+					if (closestDistance > maxIslandRadius) {
 						map[x, y] = 0; // limit island size by reverting to water
 						continue;
 					}
+
+					// close to 1 --> high falloff aka more density close to center
 					float t = closestDistance / maxIslandRadius;
 					float falloff = Mathf.Clamp01(Mathf.Pow(t, 2f));
 
-					int adjustedFill = Mathf.RoundToInt(randomFillPercent * (1 - falloff));
-					map[x, y] = (pseudoRandom.Next(0, 100) < adjustedFill) ? 1 : 0;
+					// calculate inverse percentage and fill based on probability
+					int adjustedFill = Mathf.RoundToInt(fillPercent * (1 - falloff));
+					map[x, y] = (random.Next(0, 100) < adjustedFill) ? 1 : 0;
 				}
 			}
 		}
@@ -146,10 +149,8 @@ public class MapGenerator : MonoBehaviour
 	 * STAGE 2: Smooth map with CA
 	 */
 	void SmoothMap() {
-		for (int x = 0; x < width; x++)
-		{
-			for (int y = 0; y < height; y++)
-			{
+		for (int x = 0; x < width; x++) {
+			for (int y = 0; y < height; y++) {
 				int neighbourWallTiles = GetSurroundingWallCount(x, y);
 
 				if (neighbourWallTiles > 4)
@@ -164,25 +165,77 @@ public class MapGenerator : MonoBehaviour
 
 	int GetSurroundingWallCount(int gridX, int gridY) {
 		int wallCount = 0;
-		for (int neighbourX = gridX - 1; neighbourX <= gridX + 1; neighbourX++)
-		{
-			for (int neighbourY = gridY - 1; neighbourY <= gridY + 1; neighbourY++)
-			{
-				if (IsInMapRange(neighbourX, neighbourY))
-				{
-					if (neighbourX != gridX || neighbourY != gridY)
-					{
+		for (int neighbourX = gridX - 1; neighbourX <= gridX + 1; neighbourX++) {
+			for (int neighbourY = gridY - 1; neighbourY <= gridY + 1; neighbourY++) {
+				if (IsInMapRange(neighbourX, neighbourY)) {
+					if (neighbourX != gridX || neighbourY != gridY) {
 						wallCount += map[neighbourX, neighbourY];
 					}
 				}
-				else
-				{
+				else {
 					wallCount++;
 				}
 			}
 		}
-
 		return wallCount;
+	}
+
+	bool IsInMapRange(int x, int y) {
+		return x >= 0 && x < width && y >= 0 && y < height;
+	}
+
+
+	/*
+	 * Stage 3: produce the finished map
+	 */
+	void ProcessMap() {
+
+		// clean up some little floaters in the corners
+		RemoveSmallWallRegions(5);
+
+		// create zone for Sharkie to spawn in
+		FillWater();
+		waterTilePositions.Clear();
+		for (int x = 0; x < map.GetLength(0); x++) {
+			for (int y = 0; y < map.GetLength(1); y++) {
+				if (map[x, y] == 2) {
+					waterTilePositions.Add(new Vector2Int(x, y));
+				}
+			}
+		}
+
+		// beautification of the archipelago
+		AddMiniIslands(10, 5);
+	}
+
+	void AddMiniIslands(int count, int maxSize) {
+		System.Random rand = new System.Random(seed.GetHashCode());
+
+		// generating some extra tiny islands after CA so they aren't just lumps
+		for (int i = 0; i < count; i++) {
+			int centerX = rand.Next(3, width - 3);
+			int centerY = rand.Next(3, height - 3);
+
+			// skip if center is already land
+			if (map[centerX, centerY] != 2) continue;
+
+			int radius = rand.Next(1, maxSize + 1);
+
+			// build around center to randomized radius
+			for (int dx = -radius; dx <= radius; dx++) {
+				for (int dy = -radius; dy <= radius; dy++) {
+					int x = centerX + dx;
+					int y = centerY + dy;
+
+					if (IsInMapRange(x, y) && Mathf.Sqrt(dx * dx + dy * dy) <= radius) {
+						if (map[x, y] == 2) {
+							// only convert water to land
+							map[x, y] = 1;
+						}
+					}
+				}
+			}
+		}
 	}
 
 	void FillWater() {
@@ -191,34 +244,29 @@ public class MapGenerator : MonoBehaviour
 		Queue<Vector2Int> queue = new Queue<Vector2Int>();
 		bool[,] visited = new bool[width, height];
 
-		// Start flood from the outer edge
-		for (int x = 0; x < width; x++)
-		{
-			for (int y = 0; y < height; y++)
-			{
-				if ((x == 0 || x == width - 1 || y == 0 || y == height - 1) && map[x, y] == 0)
-				{
+		// use bfs to flood water from the corner (avoids Sharkie ending up in a pond)
+		for (int x = 0; x < width; x++) {
+			for (int y = 0; y < height; y++) {
+				if ((x == 0 || x == width - 1 || y == 0 || y == height - 1) && map[x, y] == 0) {
 					queue.Enqueue(new Vector2Int(x, y));
 					visited[x, y] = true;
 				}
 			}
 		}
 
-		while (queue.Count > 0)
-		{
+		// use queue to explore surrounding tiles and mark as water
+		while (queue.Count > 0) {
 			Vector2Int tile = queue.Dequeue();
-			map[tile.x, tile.y] = 2; // Convert to water
+			map[tile.x, tile.y] = 2;
 
 			foreach (Vector2Int dir in new[] {
 				new Vector2Int(0,1), new Vector2Int(1,0),
 				new Vector2Int(0,-1), new Vector2Int(-1,0)
-			})
-			{
+			}) {
 				int nx = tile.x + dir.x;
 				int ny = tile.y + dir.y;
 
-				if (IsInMapRange(nx, ny) && !visited[nx, ny] && map[nx, ny] == 0)
-				{
+				if (IsInMapRange(nx, ny) && !visited[nx, ny] && map[nx, ny] == 0) {
 					queue.Enqueue(new Vector2Int(nx, ny));
 					visited[nx, ny] = true;
 				}
@@ -229,23 +277,20 @@ public class MapGenerator : MonoBehaviour
 	void RemoveSmallWallRegions(int threshold) {
 		bool[,] visited = new bool[map.GetLength(0), map.GetLength(1)];
 
-		for (int x = 0; x < map.GetLength(0); x++)
-		{
-			for (int y = 0; y < map.GetLength(1); y++)
-			{
-				if (!visited[x, y] && map[x, y] == 1)
-				{
+		// find weird noisy chunks of wall across the grid
+		for (int x = 0; x < map.GetLength(0); x++) {
+			for (int y = 0; y < map.GetLength(1); y++) {
+				if (!visited[x, y] && map[x, y] == 1) {
 					List<Vector2Int> region = GetRegionTiles(x, y, 1);
-					if (region.Count < threshold)
-					{
-						foreach (Vector2Int tile in region)
-						{
-							map[tile.x, tile.y] = 0; // remove tiny wall blob
+
+					// remove tiny wall blob if smaller than threshold
+					if (region.Count < threshold) {
+						foreach (Vector2Int tile in region) {
+							map[tile.x, tile.y] = 0;
 						}
 					}
 
-					foreach (Vector2Int tile in region)
-					{
+					foreach (Vector2Int tile in region) {
 						visited[tile.x, tile.y] = true;
 					}
 				}
@@ -261,22 +306,18 @@ public class MapGenerator : MonoBehaviour
 		queue.Enqueue(new Vector2Int(startX, startY));
 		visited[startX, startY] = true;
 
-		while (queue.Count > 0)
-		{
+		// basically repeat the bfs flood to find connected tiles of a given type
+		while (queue.Count > 0) {
 			Vector2Int tile = queue.Dequeue();
 			tiles.Add(tile);
 
-			for (int x = -1; x <= 1; x++)
-			{
-				for (int y = -1; y <= 1; y++)
-				{
-					if ((x == 0 || y == 0) && x != y) // 4-way neighbors
-					{
+			for (int x = -1; x <= 1; x++) {
+				for (int y = -1; y <= 1; y++) {
+					if ((x == 0 || y == 0) && x != y) {
 						int nx = tile.x + x;
 						int ny = tile.y + y;
 
-						if (IsInMapRange(nx, ny) && !visited[nx, ny] && map[nx, ny] == targetType)
-						{
+						if (IsInMapRange(nx, ny) && !visited[nx, ny] && map[nx, ny] == targetType) {
 							visited[nx, ny] = true;
 							queue.Enqueue(new Vector2Int(nx, ny));
 						}
@@ -284,52 +325,32 @@ public class MapGenerator : MonoBehaviour
 				}
 			}
 		}
-
 		return tiles;
 	}
 
-	bool IsInMapRange(int x, int y) {
-		return x >= 0 && x < width && y >= 0 && y < height;
-	}
+	public int GetTileType(Vector2 worldPos) {
+		// convert back from center origin to corner origin
+		int x = Mathf.FloorToInt(worldPos.x + map.GetLength(0) / 2f);
+		int y = Mathf.FloorToInt(worldPos.y + map.GetLength(1) / 2f);
 
-
-	/*
-	 * Stage 3: produce the finished map
-	 */
-	void ProcessMap() {
-		RemoveSmallWallRegions(20);
-		FillWater();
-		AddMiniIslands(10, 5);
-
-		// After filling water, cache water tile positions
-		waterTilePositions.Clear();
-
-		for (int x = 0; x < map.GetLength(0); x++)
-		{
-			for (int y = 0; y < map.GetLength(1); y++)
-			{
-				if (map[x, y] == 2) // water tile
-				{
-					waterTilePositions.Add(new Vector2Int(x, y));
-				}
-			}
+		if (x >= 0 && x < map.GetLength(0) && y >= 0 && y < map.GetLength(1)) {
+			return map[x, y];
 		}
+
+		return -1; // oob
 	}
 
 	void AddMapBorder() {
 		int borderSize = 1;
 		int[,] borderedMap = new int[width + borderSize * 2, height + borderSize * 2];
 
-		for (int x = 0; x < borderedMap.GetLength(0); x++)
-		{
-			for (int y = 0; y < borderedMap.GetLength(1); y++)
-			{
-				if (x >= borderSize && x < width + borderSize && y >= borderSize && y < height + borderSize)
-				{
+		// add borders so Sharkie has hard boundary
+		for (int x = 0; x < borderedMap.GetLength(0); x++) {
+			for (int y = 0; y < borderedMap.GetLength(1); y++) {
+				if (x >= borderSize && x < width + borderSize && y >= borderSize && y < height + borderSize) {
 					borderedMap[x, y] = map[x - borderSize, y - borderSize];
 				}
-				else
-				{
+				else {
 					borderedMap[x, y] = 3;
 				}
 			}
@@ -337,60 +358,24 @@ public class MapGenerator : MonoBehaviour
 		map = borderedMap;
 	}
 
-	void AddMiniIslands(int count = 10, int maxSize = 3) {
-		System.Random rand = new System.Random(seed.GetHashCode());
-
-		for (int i = 0; i < count; i++)
-		{
-			int centerX = rand.Next(3, width - 3);
-			int centerY = rand.Next(3, height - 3);
-
-			// Skip if center is already land
-			if (map[centerX, centerY] != 2) continue;
-
-			int radius = rand.Next(1, maxSize + 1);
-
-			for (int dx = -radius; dx <= radius; dx++)
-			{
-				for (int dy = -radius; dy <= radius; dy++)
-				{
-					int x = centerX + dx;
-					int y = centerY + dy;
-
-					if (IsInMapRange(x, y) && Mathf.Sqrt(dx * dx + dy * dy) <= radius)
-					{
-						if (map[x, y] == 2) // only convert water to land
-						{
-							map[x, y] = 1;
-						}
-					}
-				}
-			}
-		}
-	}
-
-
 	void SpawnSharkie() {
-		if (sharkiePrefab == null)
-		{
+		if (sharkiePrefab == null) {
 			Debug.LogWarning("Sharkie prefab not assigned!");
 			return;
 		}
 
-		// Remove old shark
-		if (currentSharkie != null)
-		{
+		// remove last shark
+		if (currentSharkie != null) {
 			Destroy(currentSharkie);
 		}
 
-		// Try to find a water tile
-		for (int i = 0; i < 100; i++)
-		{
+		// find a water tile (should not need 100 tries lol)
+		for (int i = 0; i < 100; i++) {
 			int x = Random.Range(0, width);
 			int y = Random.Range(0, height);
 
-			if (map[x, y] == 2)
-			{
+			// if water, spawn Sharkie & assign mapGenerator 
+			if (map[x, y] == 2) {
 				float worldX = x - map.GetLength(0) / 2f + 0.5f;
 				float worldY = y - map.GetLength(1) / 2f + 0.5f;
 				Vector3 spawnPos = new Vector3(worldX, 0f, worldY);
@@ -398,16 +383,13 @@ public class MapGenerator : MonoBehaviour
 				currentSharkie = Instantiate(sharkiePrefab, spawnPos, sharkiePrefab.transform.rotation);
 
 				ZombShark sharkScript = currentSharkie.GetComponent<ZombShark>();
-				if (sharkScript != null)
-				{
+				if (sharkScript != null) {
 					sharkScript.mapGenerator = this;
 				}
-
 				return;
 			}
 		}
-
-		Debug.LogWarning("Could not find valid water tile to spawn Sharkie!");
+		Debug.LogWarning("no water found for Sharkie :(");
 	}
 
 	void SpawnZombies() {
@@ -415,46 +397,12 @@ public class MapGenerator : MonoBehaviour
 		foreach (GameObject z in zombies) Destroy(z);
 		zombies.Clear();
 
-		foreach (Vector2 center in islandCenters)
-		{
+		// add a zombie to each main centerpoint
+		foreach (Vector2 center in islandCenters) {
 			Vector3 pos = new Vector3(center.x - width / 2f + 0.5f, 0.5f, center.y - height / 2f + 0.5f);
-
-			/* if it's the island with the lab, offset the zombie slightly forward
-			if (currentLab != null && Vector2.Distance(center, new Vector2(currentLab.transform.position.x + width / 2f - 0.5f, currentLab.transform.position.z + height / 2f - 0.5f)) < 3f)
-			{
-				pos.z += 1.5f; // offset forward
-			}*/
 
 			GameObject z = Instantiate(zombiePrefab, pos, Quaternion.Euler(90f, 0, 0));
 			zombies.Add(z);
 		}
 	}
-
-	public bool IsWater(Vector2 worldPos) {
-		int mapWidth = map.GetLength(0);
-		int mapHeight = map.GetLength(1);
-
-		int x = Mathf.FloorToInt(worldPos.x + mapWidth / 2f);
-		int y = Mathf.FloorToInt(worldPos.y + mapHeight / 2f);
-
-		if (x >= 0 && x < mapWidth && y >= 0 && y < mapHeight)
-		{
-			return map[x, y] == 2;
-		}
-
-		return false;
-	}
-
-	public int GetTileType(Vector2 worldPos) {
-		int x = Mathf.FloorToInt(worldPos.x + map.GetLength(0) / 2f);
-		int y = Mathf.FloorToInt(worldPos.y + map.GetLength(1) / 2f);
-
-		if (x >= 0 && x < map.GetLength(0) && y >= 0 && y < map.GetLength(1))
-		{
-			return map[x, y];
-		}
-
-		return -1; // Outside bounds
-	}
-
 }

@@ -2,21 +2,15 @@ using UnityEngine;
 
 public class ZombShark : MonoBehaviour
 {
-    public float speed = 3f;
-    public float directionChangeInterval = 1.5f;
-    public float repulsionRadius = 5f;
-    public float sampleSpacing = 0.5f;
-    public float repulsionStrength = 5f;
+    public float speed = 3.0f;
+    public float directionChangeInterval = 1.0f;
+    public float repulsionRadius = 100f;
+    public float density = 0.5f;
+    public float repulsionStrength = 10f;
 
     public MapGenerator mapGenerator;
-
     private float timer;
     private Vector2 direction;
-
-    public float minX = -50f;
-    public float maxX = 50f;
-    public float minY = -50f;
-    public float maxY = 50f;
 
     void Start() {
         Debug.Log("Sharkie swimming :)");
@@ -25,23 +19,20 @@ public class ZombShark : MonoBehaviour
 
     void Update() {
         timer += Time.deltaTime;
-        if (timer >= directionChangeInterval)
-        {
-            float angle = Random.Range(-45f, 45f);
+
+        // periodically rotate slightly to simulate swimming patterns
+        if (timer >= directionChangeInterval) {
+            float angle = Random.Range(-60f, 60f);
             direction = RotateVector(direction, angle);
             timer = 0.0f;
         }
 
+        // calculate new direction from rotation and repelling from walls
         Vector2 repulsion = RepelFromWalls();
         Vector2 finalDir = (direction + repulsion).normalized;
 
         Vector3 move = new Vector3(finalDir.x, 0.0f, finalDir.y);
         Vector3 nextPos = transform.position + move * speed * Time.deltaTime;
-
-        // clamp within bounds
-        nextPos.x = Mathf.Clamp(nextPos.x, minX, maxX);
-        nextPos.y = 0.0f;
-        nextPos.z = Mathf.Clamp(nextPos.z, minY, maxY);
 
         transform.position = nextPos;
     }
@@ -51,6 +42,7 @@ public class ZombShark : MonoBehaviour
         float cos = Mathf.Cos(radians);
         float sin = Mathf.Sin(radians);
 
+        // apply 2D rotation formula to x and y to get new direction vector
         return new Vector2(
             direction.x * cos - direction.y * sin,
             direction.x * sin + direction.y * cos
@@ -61,38 +53,33 @@ public class ZombShark : MonoBehaviour
         Vector2 repel = Vector2.zero;
         Vector2 currentPos = new Vector2(transform.position.x, transform.position.z); // FIXED
 
-        for (float dx = -repulsionRadius; dx <= repulsionRadius; dx += sampleSpacing)
-        {
-            for (float dy = -repulsionRadius; dy <= repulsionRadius; dy += sampleSpacing)
-            {
+        // sample points from shark to radius length away
+        for (float dx = -repulsionRadius; dx <= repulsionRadius; dx += density) {
+            for (float dy = -repulsionRadius; dy <= repulsionRadius; dy += density) {
                 Vector2 offset = new Vector2(dx, dy);
-                Vector2 samplePoint = currentPos + offset;
+                Vector2 testPoint = currentPos + offset;
 
                 float distance = offset.magnitude;
-                if (distance > 0.01f && distance < repulsionRadius)
-                {
-                    int tileType = mapGenerator.GetTileType(samplePoint);
+                if (distance > 0.01f && distance < repulsionRadius) {
+                    int tileType = mapGenerator.GetTileType(testPoint);
 
-                    // Repel from cave (0), wall (1), or border (3)
-                    if (tileType == 0 || tileType == 1 || tileType == 3)
-                    {
-                        float strength = (repulsionRadius - distance) / repulsionRadius;
+                    // repel if tile = cave, wall, border, or oob
+                    if (tileType == 0 || tileType == 1 || tileType == 3) {
+                        float strength = (repulsionRadius - distance) / repulsionRadius * 10;
 
-                        float typeMultiplier = tileType switch
-                        {
-                            3 => 2f,
-                            1 => 2f,
-                            0 => 1f,
-                            -1 => 1f,
-                            _ => 1f
+                        // repel harder from borders than land just to be safe
+                        float multiplier = tileType switch {
+                            3 => 5.0f,
+                            1 => 1.5f,
+                            0 => 1.2f,
+                            -1 => 5.0f,
+                            _ => 1.0f
                         };
-
-                        repel += offset.normalized * -strength * typeMultiplier;
+                        repel += -offset.normalized * strength * multiplier;
                     }
                 }
             }
         }
-
         return repel.normalized * repulsionStrength;
     }
 
